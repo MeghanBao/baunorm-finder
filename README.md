@@ -3,18 +3,26 @@
 Stichwort eingeben (z. B. "Mindestbewehrung"), sofort die passende Norm, Abschnittsnummer
 und den relevanten Wert finden — ohne PDFs zu durchsuchen.
 
+> **🔎 Live-Demo → https://meghanbao.github.io/baunorm-finder/demo.html**
+> Einfach anklicken — läuft direkt im Browser, keine Installation.
+
 ## Demo ohne Installation
 
-`demo.html` doppelt anklicken und im Browser öffnen — läuft komplett offline mit
-eingebetteten Beispieldaten, keine Installation, kein Server nötig. Enthält einen
-Teil bereits verifizierter Daten (Brandschutzklassen), Rest noch Platzhalter
-(siehe Hinweisbanner in der Demo). Ausprobieren: "feuerhemmend", "nichtbrennbar",
-"Erdbeben".
+Zwei Wege, beide ohne Server und ohne Installation:
+
+- **Online:** [meghanbao.github.io/baunorm-finder/demo.html](https://meghanbao.github.io/baunorm-finder/demo.html)
+  öffnen (via GitHub Pages gehostet).
+- **Offline:** `demo.html` doppelt anklicken — die Demo ist self-contained
+  (Beispieldaten eingebettet) und läuft komplett offline, auch per `file://`.
+
+Enthält einen Teil bereits verifizierter Daten (Brandschutzklassen), Rest noch
+Platzhalter (siehe Hinweisbanner in der Demo). Ausprobieren: "feuerhemmend",
+"nichtbrennbar", "Erdbeben".
 
 ## Produktivbetrieb starten
 
 ```bash
-cd code-lookup
+cd baunorm-finder
 pip install -r requirements.txt
 python server.py
 ```
@@ -84,7 +92,9 @@ Normtexte selbst.
 
 ## Architektur
 
-- `demo.html` — Standalone-Demo mit eingebetteten Beispieldaten, kein Server nötig
+- `demo.html` — Standalone-Demo mit eingebetteten Beispieldaten, kein Server nötig;
+  online via GitHub Pages unter
+  [meghanbao.github.io/baunorm-finder/demo.html](https://meghanbao.github.io/baunorm-finder/demo.html)
 - `server.py` — FastAPI-Backend für den Produktivbetrieb, liest `data.csv` ein,
   stellt `/api/search?q=` bereit
 - `static/index.html` — Frontend des Produktivbetriebs, ruft die Such-API auf
