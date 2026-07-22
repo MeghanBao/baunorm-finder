@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Normen-Nachschlage-Tool – Demo</title>
+<style>
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    font-family: -apple-system, "Segoe UI", Arial, sans-serif;
+    background: #f5f6f7; color: #222;
+    max-width: 900px; margin: 0 auto; padding: 24px 16px 60px;
+  }
+  h1 { font-size: 20px; margin-bottom: 4px; }
+  .sub { color: #888; font-size: 13px; margin-bottom: 8px; }
+  .demo-banner {
+    background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af;
+    font-size: 13px; padding: 10px 14px; border-radius: 8px; margin-bottom: 18px;
+  }
+  input {
+    width: 100%; padding: 12px 16px; font-size: 16px;
+    border: 1px solid #ccc; border-radius: 8px; margin-bottom: 16px;
+  }
+  input:focus { outline: none; border-color: #2563eb; }
+  .count { color: #888; font-size: 13px; margin-bottom: 10px; }
+  .card {
+    background: #fff; border: 1px solid #e5e7eb; border-radius: 10px;
+    padding: 14px 18px; margin-bottom: 12px;
+  }
+  .code-name { font-weight: 600; font-size: 14px; color: #1d4ed8; }
+  .article { display: inline-block; background: #eef2ff; color: #4338ca;
+    font-size: 12px; padding: 2px 8px; border-radius: 6px; margin-left: 8px; }
+  .content { margin-top: 8px; font-size: 14.5px; line-height: 1.6; }
+  .value { margin-top: 6px; font-size: 14.5px; font-weight: 600; }
+  .note { margin-top: 6px; font-size: 12.5px; color: #b45309; background: #fffbeb;
+    padding: 4px 8px; border-radius: 6px; display: inline-block; }
+  mark { background: #fef08a; padding: 0 2px; }
+  .empty { color: #999; text-align: center; padding: 40px 0; }
+  .try-btns { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+  .try-btns button {
+    font-size: 12.5px; padding: 5px 12px; border-radius: 999px; border: 1px solid #ccc;
+    background: #fff; cursor: pointer; color: #444;
+  }
+  .try-btns button:hover { background: #eef2ff; border-color: #93c5fd; }
+</style>
+</head>
+<body>
+  <h1>📖 Normen-Nachschlage-Tool – Demo</h1>
+  <div class="sub">Läuft komplett im Browser, keine Installation nötig – Datei einfach doppelt anklicken.</div>
+  <div class="demo-banner">
+    ℹ️ Diese Demo enthält teils <strong>verifizierte Daten aus der MVV TB 2025/1</strong> (amtlich, kostenfrei, DIBt)
+    und teils noch <strong>unbestätigte Platzhalter</strong> (markiert mit ⚠) für Werte aus kostenpflichtigen
+    Eurocode-Volltexten. Für den produktiven Einsatz: <code>server.py</code> starten (siehe README).
+  </div>
+
+  <div class="try-btns" id="tryBtns"></div>
+  <input id="q" placeholder="Suchbegriff eingeben, z. B. feuerhemmend…" autofocus>
+  <div class="count" id="count"></div>
+  <div id="results"></div>
+
+<script>
+// Beispieldaten direkt eingebettet – funktioniert ohne Server, auch per Doppelklick/file://
+const DATA = [
+  {
+    code: "DIN 4102-1:1998-05",
+    article: "Abschnitt 5.1/5.2, 6.1, 6.2",
+    keywords: "Baustoffklasse;nichtbrennbar;schwerentflammbar;normalentflammbar;Brandverhalten",
+    summary: "Klassifizierung von Baustoffen nach ihrem Brandverhalten",
+    value: "nichtbrennbar: Kriterien nach Abschnitt 5.1/5.2, ggf. Schmelzpunkt ≥1000°C nach DIN 4102-17:2017-12. schwerentflammbar: Abschnitt 6.1. normalentflammbar: Abschnitt 6.2",
+    note: "✅ Verifiziert – Quelle: MVV TB 2025/1 (DIBt, amtlich, kostenfrei), A 2.1.2.2–A 2.1.2.4"
+  },
+  {
+    code: "DIN 4102-2:1977-09",
+    article: "Abschnitt 6.2.4",
+    keywords: "Feuerwiderstandsklasse;feuerhemmend;hochfeuerhemmend;feuerbeständig;F30;F60;F90;F120",
+    summary: "Mindestdauer der Standsicherheit bei Brandeinwirkung nach Einheits-Temperaturzeitkurve (ETK)",
+    value: "feuerhemmend = mind. 30 Min. hochfeuerhemmend = mind. 60 Min. feuerbeständig = mind. 90 Min. Sonderfall 120 Min. für Bauteile nach A 2.1.3.1 Buchstabe f",
+    note: "✅ Verifiziert – Quelle: MVV TB 2025/1, A 2.1.3.2.2–A 2.1.3.2.8"
+  },
+  {
+    code: "DIN 4149:2005-04 „Bauten in deutschen Erdbebengebieten“",
+    article: "A 1.2.9.1 (MVV TB) / DIN 4149 Volltext",
+    keywords: "Erdbeben;Erdbebenzone;Bauten in Erdbebengebieten;Standsicherheit",
+    summary: "Deutschland regelt Erdbebennachweise über die nationale Norm DIN 4149, NICHT über Eurocode 8. Bei Stahl-/Spannbetonbauten wird ergänzend auf DIN EN 1992-1-1:2011-01 verwiesen",
+    value: "Erdbebenzonen 1–3, genaue Zone für Standort in der Zonenkarte von DIN 4149 nachschlagen",
+    note: "⚠ Korrektur ggü. früherer Annahme (Eurocode 8 war falsch) – Quelle: MVV TB 2025/1, A 1.2.9, Anlage A 1.2.9/1"
+  },
+  {
+    code: "DIN EN 1992-1-1:2011-01 /A1:2015-03 + Nationaler Anhang DIN EN 1992-1-1/NA:2013-04 /NA/A1:2015-12",
+    article: "Anlage A 1.2.3/1–2 (MVV TB) / Abschnitt 9.2.1.1 im Normtext",
+    keywords: "Mindestbewehrung;Längsbewehrung;Bewehrungsgrad;Stahlbeton",
+    summary: "Bemessungsregeln für Stahlbeton-/Spannbetontragwerke im Hochbau; Mindestbewehrung der Längsbewehrung ist im Eurocode-Basistext geregelt",
+    value: "Ausgaben/Versionsstand bestätigt – genaue Formel/Zahlenwert im kostenpflichtigen Normtext nachschlagen (nicht in MVV TB enthalten)",
+    note: "✅ Ausgabe verifiziert – Quelle: MVV TB 2025/1, Anlage A 1.2.3/1-2. ⚠ Wert selbst noch nicht verifiziert"
+  },
+  {
+    code: "DIN EN 1991-1-1:2010-12 + NA:2010-12/NA/A1:2015-05 (Nutzlasten); DIN EN 1991-1-3:2010-12 + NA:2019-04 (Schnee); DIN EN 1991-1-4:2010-12 + NA:2010-12 (Wind)",
+    article: "Anlage A 1.2.1/2–5 (MVV TB)",
+    keywords: "Wichten;Eigengewicht;Nutzlasten;Schneelasten;Windlasten;Lastkombination",
+    summary: "Maßgebliche Eurocode-1-Teile und Nationale Anhänge für Einwirkungen im Hochbau",
+    value: "Ausgaben/Versionsstand bestätigt – konkrete Lastwerte/Zonenkarten im jeweiligen Nationalen Anhang nachschlagen (nicht in MVV TB enthalten)",
+    note: "✅ Ausgaben verifiziert – Quelle: MVV TB 2025/1, Anlage A 1.2.1. ⚠ Werte selbst noch nicht verifiziert"
+  }
+];
+
+const $ = id => document.getElementById(id);
+
+function highlight(text, kw) {
+  if (!kw || !text) return text || '';
+  const esc = kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return text.replace(new RegExp(esc, 'gi'), m => `<mark>${m}</mark>`);
+}
+
+function search(q) {
+  q = (q || '').trim().toLowerCase();
+  if (!q) {
+    $('results').innerHTML = '';
+    $('count').textContent = `${DATA.length} Einträge insgesamt – Suchbegriff eingeben, um zu starten`;
+    return;
+  }
+  const matched = DATA.filter(r =>
+    r.code.toLowerCase().includes(q) ||
+    r.article.toLowerCase().includes(q) ||
+    r.keywords.toLowerCase().includes(q) ||
+    r.summary.toLowerCase().includes(q)
+  );
+  $('count').textContent = `${matched.length} Treffer`;
+  if (matched.length === 0) {
+    $('results').innerHTML = '<div class="empty">Keine Treffer. Anderen Suchbegriff versuchen.</div>';
+    return;
+  }
+  $('results').innerHTML = matched.map(r => `
+    <div class="card">
+      <span class="code-name">${highlight(r.code, q)}</span>
+      <span class="article">${highlight(r.article, q)}</span>
+      <div class="content">${highlight(r.summary, q)}</div>
+      <div class="value">→ ${highlight(r.value, q)}</div>
+      ${r.note ? `<div class="note">${r.note}</div>` : ''}
+    </div>
+  `).join('');
+}
+
+// Schnellzugriff-Buttons mit Beispielbegriffen
+const examples = ["feuerhemmend", "nichtbrennbar", "Erdbeben", "Mindestbewehrung"];
+$('tryBtns').innerHTML = examples.map(e => `<button data-e="${e}">${e}</button>`).join('');
+document.querySelectorAll('#tryBtns button').forEach(b => {
+  b.onclick = () => { $('q').value = b.dataset.e; search(b.dataset.e); };
+});
+
+$('q').addEventListener('input', () => search($('q').value));
+search('');
+</script>
+</body>
+</html>

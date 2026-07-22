@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>规范条文速查</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: #f5f6f7; color: #222;
+    max-width: 900px; margin: 0 auto; padding: 24px 16px 60px;
+  }
+  h1 { font-size: 20px; margin-bottom: 4px; }
+  .sub { color: #888; font-size: 13px; margin-bottom: 18px; }
+  input {
+    width: 100%; padding: 12px 16px; font-size: 16px;
+    border: 1px solid #ccc; border-radius: 8px; margin-bottom: 16px;
+  }
+  input:focus { outline: none; border-color: #2563eb; }
+  .count { color: #888; font-size: 13px; margin-bottom: 10px; }
+  .card {
+    background: #fff; border: 1px solid #e5e7eb; border-radius: 10px;
+    padding: 14px 18px; margin-bottom: 12px;
+  }
+  .code-name { font-weight: 600; font-size: 14px; color: #1d4ed8; }
+  .article { display: inline-block; background: #eef2ff; color: #4338ca;
+    font-size: 12px; padding: 2px 8px; border-radius: 6px; margin-left: 8px; }
+  .content { margin-top: 8px; font-size: 14.5px; line-height: 1.6; }
+  .value { margin-top: 6px; font-size: 14.5px; font-weight: 600; }
+  .note { margin-top: 6px; font-size: 12.5px; color: #b45309; background: #fffbeb;
+    padding: 4px 8px; border-radius: 6px; display: inline-block; }
+  mark { background: #fef08a; padding: 0 2px; }
+  .empty { color: #999; text-align: center; padding: 40px 0; }
+</style>
+</head>
+<body>
+  <h1>📖 德国规范条文速查</h1>
+  <div class="sub">输入关键词(如 Mindestbewehrung / 最小配筋率)、条文号或规范名,回车即可搜索。数据存于 data.csv,可自行编辑扩充。</div>
+
+  <input id="q" placeholder="输入关键词搜索…" autofocus>
+  <div class="count" id="count"></div>
+  <div id="results"></div>
+
+<script>
+let rows = [];
+
+function highlight(text, kw) {
+  if (!kw || !text) return text || '';
+  const esc = kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return text.replace(new RegExp(esc, 'gi'), m => `<mark>${m}</mark>`);
+}
+
+function render(kw) {
+  const q = (kw || '').trim();
+  const results = document.getElementById('results');
+  const count = document.getElementById('count');
+
+  if (!q) {
+    results.innerHTML = '';
+    count.textContent = `共 ${rows.length} 条数据,输入关键词开始搜索`;
+    return;
+  }
+
+  const qLower = q.toLowerCase();
+  const matched = rows.filter(r =>
+    (r['规范名称'] || '').toLowerCase().includes(qLower) ||
+    (r['条文号'] || '').toLowerCase().includes(qLower) ||
+    (r['关键词'] || '').toLowerCase().includes(qLower) ||
+    (r['内容摘要'] || '').toLowerCase().includes(qLower)
+  );
+
+  count.textContent = `找到 ${matched.length} 条结果`;
+
+  if (matched.length === 0) {
+    results.innerHTML = '<div class="empty">没有匹配的条文,试试其他关键词,或去 data.csv 里补充</div>';
+    return;
+  }
+
+  results.innerHTML = matched.map(r => `
+    <div class="card">
+      <span class="code-name">${highlight(r['规范名称'], q)}</span>
+      <span class="article">${highlight(r['条文号'], q)}</span>
+      <div class="content">${highlight(r['内容摘要'], q)}</div>
+      <div class="value">→ ${highlight(r['数值结论'], q)}</div>
+      ${r['备注'] ? `<div class="note">${r['备注']}</div>` : ''}
+    </div>
+  `).join('');
+}
+
+Papa.parse('data.csv', {
+  download: true,
+  header: true,
+  skipEmptyLines: true,
+  complete: (res) => {
+    rows = res.data;
+    render('');
+  },
+  error: (err) => {
+    document.getElementById('results').innerHTML =
+      `<div class="empty">加载 data.csv 失败: ${err}</div>`;
+  }
+});
+
+const input = document.getElementById('q');
+input.addEventListener('input', () => render(input.value));
+</script>
+</body>
+</html>
