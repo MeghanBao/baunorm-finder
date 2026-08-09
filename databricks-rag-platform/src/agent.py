@@ -18,6 +18,7 @@ Design goals:
 
 from __future__ import annotations
 
+import uuid
 from typing import Any, Generator, Optional
 
 import mlflow
@@ -164,7 +165,11 @@ class BaunormRagAgent(ChatAgent):
 
         if not docs:
             return ChatAgentResponse(
-                messages=[ChatAgentMessage(role="assistant", content=NO_CONTEXT_ANSWER)],
+                messages=[
+                    ChatAgentMessage(
+                        role="assistant", content=NO_CONTEXT_ANSWER, id=str(uuid.uuid4())
+                    )
+                ],
                 custom_outputs={"citations": [], "grounded": False},
             )
 
@@ -176,7 +181,9 @@ class BaunormRagAgent(ChatAgent):
         answer = completion.choices[0].message.content
 
         return ChatAgentResponse(
-            messages=[ChatAgentMessage(role="assistant", content=answer)],
+            messages=[
+                ChatAgentMessage(role="assistant", content=answer, id=str(uuid.uuid4()))
+            ],
             custom_outputs={"citations": format_citations(docs), "grounded": True},
         )
 

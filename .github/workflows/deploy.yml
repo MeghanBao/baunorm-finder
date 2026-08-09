@@ -1,0 +1,54 @@
+# CI/CD for the baunorm RAG platform (databricks-rag-platform/).
+#   * PRs: run unit tests + `databricks bundle validate`.
+#   * push to main: deploy the bundle to the staging target.
+# Requires repo secrets DATABRICKS_HOST and DATABRICKS_TOKEN.
+name: rag-platform
+
+on:
+  push:
+    branches: [main]
+    paths: ["databricks-rag-platform/**", ".github/workflows/deploy.yml"]
+  pull_request:
+    paths: ["databricks-rag-platform/**", ".github/workflows/deploy.yml"]
+
+defaults:
+  run:
+    working-directory: databricks-rag-platform
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install test deps
+        run: pip install "mlflow-skinny>=2.16.0" numpy pandas pytest
+      - name: Unit tests
+        run: pytest tests/ -v
+
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: databricks/setup-cli@main
+      - name: Validate bundle
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+        run: databricks bundle validate -t staging
+
+  deploy:
+    # Only promote to staging after tests + validate pass on main.
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: [test, validate]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: databricks/setup-cli@main
+      - name: Deploy to staging
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+        run: databricks bundle deploy -t staging
