@@ -123,16 +123,18 @@ w = WorkspaceClient()
 resp = None
 for attempt in range(90):  # up to ~30 min
     ep = w.serving_endpoints.get(deployment.endpoint_name)
-    cfg_update = str(getattr(ep.state, "config_update", ""))
-    ready = str(getattr(ep.state, "ready", ""))
+    # Enum str is like "EndpointStateReady.NOT_READY"; take the last token so a
+    # NOT_READY value is never mistaken for READY (substring trap).
+    cfg_update = str(getattr(ep.state, "config_update", "")).split(".")[-1]
+    ready = str(getattr(ep.state, "ready", "")).split(".")[-1]
     print(f"  [{attempt}] ready={ready} config_update={cfg_update}")
-    if "FAILED" in cfg_update:
+    if cfg_update == "UPDATE_FAILED":
         # Surface the served-entity failure message for a fast, actionable error.
         detail = ""
         for se in (ep.config.served_entities if ep.config else []) or []:
             detail = getattr(se.state, "deployment_state_message", "") or detail
         raise RuntimeError(f"Agent endpoint build failed: {detail}")
-    if "READY" in ready:
+    if ready == "READY":
         resp = client.predict(
             endpoint=deployment.endpoint_name,
             inputs={"messages": [{"role": "user", "content": "Was bedeutet feuerbeständig?"}]},
