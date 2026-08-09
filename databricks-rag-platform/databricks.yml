@@ -30,6 +30,7 @@ variables:
 include:
   - resources/jobs.yml
   - resources/agent_deploy.yml
+  - resources/ingest.yml
 
 # Notebooks/modules read BAUNORM_ENV to resolve the catalog; keep it in one place.
 targets:

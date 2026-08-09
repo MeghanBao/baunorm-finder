@@ -69,12 +69,26 @@ chunks = (
     )
 )
 
+# Fold in ingested document passages (e.g. the MVV TB PDF from notebook 06) if
+# present, so the same index + agent retrieve them. Schema is aligned by name.
+# Use try/except rather than spark.catalog.tableExists — the latter is unreliable
+# with 3-level Unity Catalog names.
+_mvvtb = f"{cfg.catalog}.{cfg.curated_schema}.mvvtb_chunks"
+try:
+    doc_chunks = spark.table(_mvvtb).select(chunks.columns)
+    n_docs = doc_chunks.count()
+    chunks = chunks.unionByName(doc_chunks)
+    print(f"Unioned {n_docs} passages from {_mvvtb}")
+except Exception as e:  # noqa: BLE001
+    print(f"No document passages to union ({_mvvtb}): {str(e)[:120]}")
+
 (
     chunks.write.mode("overwrite")
     .option("delta.enableChangeDataFeed", "true")
     .saveAsTable(cfg.normen_chunks)
 )
-print(f"Wrote {chunks.count()} chunks -> {cfg.normen_chunks}")
+EXPECTED_ROWS = spark.table(cfg.normen_chunks).count()
+print(f"Wrote {EXPECTED_ROWS} chunks -> {cfg.normen_chunks}")
 
 # COMMAND ----------
 # MAGIC %md ## 2. Ensure the embedding endpoint (self-hosted multilingual-e5)
@@ -115,12 +129,21 @@ if VECTOR_SEARCH_ENDPOINT not in endpoints:
     print(f"Creating endpoint {VECTOR_SEARCH_ENDPOINT} …")
 vsc.wait_for_endpoint(VECTOR_SEARCH_ENDPOINT, verbose=True)
 
-# Delta Sync index with managed embeddings computed by our embedding endpoint.
+# Does the index already exist? Decide create-vs-sync on existence alone, so a
+# transient sync error never falls through to create() and hits "already exists".
 try:
-    index = vsc.get_index(VECTOR_SEARCH_ENDPOINT, cfg.normen_index)
-    index.sync()
-    print(f"Index exists — triggered sync: {cfg.normen_index}")
+    vsc.get_index(VECTOR_SEARCH_ENDPOINT, cfg.normen_index)
+    index_exists = True
 except Exception:
+    index_exists = False
+
+if index_exists:
+    try:
+        vsc.get_index(VECTOR_SEARCH_ENDPOINT, cfg.normen_index).sync()
+        print(f"Index exists — triggered sync: {cfg.normen_index}")
+    except Exception as e:  # e.g. a sync is already running — fine, we wait below
+        print(f"Sync trigger note (continuing to wait): {str(e)[:150]}")
+else:
     kwargs = dict(
         endpoint_name=VECTOR_SEARCH_ENDPOINT,
         index_name=cfg.normen_index,
@@ -145,16 +168,18 @@ except Exception:
 import time
 
 idx = vsc.get_index(VECTOR_SEARCH_ENDPOINT, cfg.normen_index)
-for _ in range(60):  # up to ~10 min
+# Wait until the sync has actually ingested all source rows (ready can be True on
+# the previous state while a TRIGGERED re-sync is still running).
+for _ in range(90):  # up to ~15 min
     status = idx.describe().get("status", {})
     ready = status.get("ready", False)
-    detail = status.get("detailed_state", status.get("message", ""))
-    print(f"index ready={ready}  state={detail}")
-    if ready:
+    n = status.get("indexed_row_count", 0)
+    print(f"index ready={ready}  indexed_rows={n}/{EXPECTED_ROWS}")
+    if ready and n >= EXPECTED_ROWS:
         break
     time.sleep(10)
 else:
-    print("WARNING: index not ready after wait — smoke test below may be empty.")
+    print("WARNING: index did not reach expected row count within the wait window.")
 
 # COMMAND ----------
 # MAGIC %md ## 5. Smoke test the index

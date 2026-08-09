@@ -1,0 +1,34 @@
+# Ingest the MVV TB PDF into verified passages, then rebuild the Vector Search
+# index so it includes them (the deployed agent then retrieves them, no change).
+resources:
+  jobs:
+    baunorm_ingest_pdf:
+      name: "[${var.env}] baunorm ingest MVV TB PDF"
+      tags:
+        project: baunorm
+        env: ${var.env}
+      parameters:
+        - name: env
+          default: ${var.env}
+        - name: catalog
+          default: ${var.catalog}
+        - name: embedding_mode
+          default: managed
+      tasks:
+        - task_key: ingest_pdf
+          notebook_task:
+            notebook_path: ../notebooks/06_ingest_mvvtb_pdf.py
+            base_parameters:
+              env: ${var.env}
+              catalog: ${var.catalog}
+              embedding_mode: managed
+
+        - task_key: build_index
+          depends_on:
+            - task_key: ingest_pdf
+          notebook_task:
+            notebook_path: ../notebooks/02_build_index.py
+            base_parameters:
+              env: ${var.env}
+              catalog: ${var.catalog}
+              embedding_mode: managed

@@ -46,8 +46,9 @@ Alles bleibt innerhalb von Databricks + Unity Catalog — **kein externer LLM-Au
 |---|---|---|
 | Konfiguration | UC-Namen, Modell-IDs, Provenance-Vokabular | `src/config.py` |
 | Korpus (Governance) | Prompt-Bau + verifiziert/synthetisch-Regeln | `src/corpus_synth.py` |
-| Ingestion | `data.csv` → `curated.normen` (+provenance) | `notebooks/01_synthesize_corpus.py` |
-| Index | Chunking + CDF + Vector Search Delta Sync | `notebooks/02_build_index.py` |
+| Ingestion (synth) | `data.csv` → `curated.normen` (+provenance) | `notebooks/01_synthesize_corpus.py` |
+| Ingestion (echte PDFs) | offizielles **MVV TB 2025/1** PDF (DIBt, 354 S.) → `curated.mvvtb_chunks` (verifiziert) | `notebooks/06_ingest_mvvtb_pdf.py` |
+| Index | Chunking + CDF + Vector Search Delta Sync (Norm-Zeilen ∪ PDF-Passagen) | `notebooks/02_build_index.py` |
 | Agent | ChatAgent (Retriever + Llama + Zitate) | `src/agent.py`, `notebooks/03_log_and_deploy_agent.py` |
 | Evaluation | Mosaic AI Agent Evaluation, Schwellen-Gate | `notebooks/04_evaluate.py`, `eval/eval_set.jsonl` |
 | App | `/api/ask` + RAG-UI + Audit-Log | `../baunorm-lakebase-app/` |
@@ -97,6 +98,12 @@ databricks bundle run baunorm_pipeline -t dev
 
 # 2. Agent als Model-Serving-Endpoint deployen (Review App + Inference Tables)
 databricks bundle run baunorm_agent_deploy -t dev
+
+# 3. (optional) Echte MVV-TB-PDF ingestieren -> Index wächst auf ~1150 Passagen.
+#    Vorher PDF in ein UC-Volume laden, z. B.:
+#    databricks volumes create workspace curated raw_docs MANAGED
+#    databricks fs cp MVVTB_2025-1.pdf dbfs:/Volumes/workspace/curated/raw_docs/MVVTB_2025-1.pdf
+databricks bundle run baunorm_ingest_pdf -t dev
 ```
 
 Ergebnis (verifiziert):
