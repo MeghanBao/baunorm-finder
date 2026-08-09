@@ -69,13 +69,14 @@ with mlflow.start_run(run_name=f"baunorm-rag-{cfg.env}"):
         code_paths=[os.path.abspath(os.path.join(os.getcwd(), "..", "src"))],
         resources=resources,
         input_example=input_example,
-        pip_requirements=[
-            "mlflow",
+        # extra_ (not pip_requirements): let MLflow infer the base env (mlflow,
+        # pandas, cloudpickle, pydantic, ChatAgent runtime) and ADD our deps on
+        # top. An explicit pip_requirements dropped inferred packages and the
+        # served model failed to load.
+        extra_pip_requirements=[
             "databricks-vectorsearch",
             "databricks-sdk",
-            # get_open_ai_client() returns an openai.OpenAI client, so the serving
-            # container needs the openai package too.
-            "openai",
+            "openai",  # get_open_ai_client() returns an openai.OpenAI client
         ],
     )
 print("Logged:", logged.model_uri)
