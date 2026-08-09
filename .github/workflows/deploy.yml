@@ -1,7 +1,9 @@
 # CI/CD for the baunorm RAG platform (databricks-rag-platform/).
-#   * PRs: run unit tests + `databricks bundle validate`.
-#   * push to main: deploy the bundle to the staging target.
-# Requires repo secrets DATABRICKS_HOST and DATABRICKS_TOKEN.
+#   * Always: run unit tests.
+#   * If DATABRICKS_HOST/DATABRICKS_TOKEN secrets are set: `bundle validate`,
+#     and on push to main also `bundle deploy -t staging`.
+#   * Without those secrets the Databricks steps are skipped (with a notice) so
+#     the pipeline stays green on a fork/clone that has no workspace yet.
 name: rag-platform
 
 on:
@@ -28,27 +30,28 @@ jobs:
       - name: Unit tests
         run: pytest tests/ -v
 
-  validate:
+  bundle:
     runs-on: ubuntu-latest
+    needs: [test]
+    env:
+      DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+      DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
     steps:
       - uses: actions/checkout@v4
+      - name: Check for workspace credentials
+        id: creds
+        run: |
+          if [ -n "$DATABRICKS_HOST" ] && [ -n "$DATABRICKS_TOKEN" ]; then
+            echo "have=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "have=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::DATABRICKS_HOST/DATABRICKS_TOKEN secrets not set — skipping bundle validate/deploy."
+          fi
       - uses: databricks/setup-cli@main
+        if: steps.creds.outputs.have == 'true'
       - name: Validate bundle
-        env:
-          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
-          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+        if: steps.creds.outputs.have == 'true'
         run: databricks bundle validate -t staging
-
-  deploy:
-    # Only promote to staging after tests + validate pass on main.
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    needs: [test, validate]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: databricks/setup-cli@main
       - name: Deploy to staging
-        env:
-          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
-          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+        if: steps.creds.outputs.have == 'true' && github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: databricks bundle deploy -t staging
