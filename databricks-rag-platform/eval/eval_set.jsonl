@@ -1,0 +1,8 @@
+{"request": "Was bedeutet feuerbeständig nach DIN 4102-2?", "expected_norm": "DIN 4102-2", "expected_facts": "feuerbeständig = mindestens 90 Minuten Feuerwiderstand"}
+{"request": "Wie lange hält ein feuerhemmendes Bauteil dem Feuer stand?", "expected_norm": "DIN 4102-2", "expected_facts": "feuerhemmend = mindestens 30 Minuten"}
+{"request": "Was ist der Unterschied zwischen nichtbrennbar und schwerentflammbar?", "expected_norm": "DIN 4102-1", "expected_facts": "Baustoffklassen nach Brandverhalten; nichtbrennbar strengste Klasse, schwerentflammbar geringere Anforderung"}
+{"request": "Welche Norm regelt Erdbebennachweise in Deutschland?", "expected_norm": "DIN 4149", "expected_facts": "In Deutschland regelt DIN 4149 die Erdbebennachweise, nicht Eurocode 8"}
+{"request": "Welche Eurocode-Teile gelten für Nutzlasten, Schnee- und Windlasten?", "expected_norm": "DIN EN 1991", "expected_facts": "Eurocode 1: Nutzlasten (1991-1-1), Schnee (1991-1-3), Wind (1991-1-4) mit Nationalem Anhang"}
+{"request": "Wo ist die Mindestbewehrung der Längsbewehrung im Stahlbeton geregelt?", "expected_norm": "DIN EN 1992-1-1", "expected_facts": "Eurocode 2, Abschnitt 9.2.1.1; konkrete Werte im kostenpflichtigen Normtext"}
+{"request": "Was gilt für hochfeuerhemmende Bauteile?", "expected_norm": "DIN 4102-2", "expected_facts": "hochfeuerhemmend = mindestens 60 Minuten"}
+{"request": "Warum reicht der Eurocode-Basistext allein nicht aus?", "expected_norm": "Nationaler Anhang", "expected_facts": "Erst der deutsche Nationale Anhang (NA) enthält die gültigen Werte"}
