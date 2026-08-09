@@ -16,12 +16,19 @@ variables:
   env:
     description: Logical environment; folded into the catalog name (baunorm_dev / baunorm).
     default: dev
-  warehouse_id:
-    description: SQL warehouse used by ai_query synthesis + index maintenance.
-    default: ""
+  catalog:
+    description: >-
+      Existing Unity Catalog to deploy into. Defaults to `workspace` (the managed
+      catalog present on serverless/Free workspaces where you can't create a new
+      catalog). On a full workspace, leave empty to use the env-suffixed catalog.
+    default: workspace
 
+# Only the serverless pipeline job is active here. The full-workspace resource
+# definitions (own catalog, self-hosted embedding endpoint, the App) live under
+# resources/full-workspace/ and are NOT included on this serverless target — see
+# resources/full-workspace/README notes.
 include:
-  - resources/*.yml
+  - resources/jobs.yml
 
 # Notebooks/modules read BAUNORM_ENV to resolve the catalog; keep it in one place.
 targets:

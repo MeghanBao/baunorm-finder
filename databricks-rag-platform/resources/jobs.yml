@@ -1,53 +1,46 @@
-# The end-to-end pipeline as a single multi-task job: synthesize -> index ->
-# deploy -> evaluate. Tasks run in order; a failed eval gate stops promotion.
+# Retrieval-core pipeline on serverless compute: synthesize -> build index ->
+# in-notebook RAG smoke test. No classic job cluster (serverless-only workspace),
+# no separate agent Model Serving endpoint (that's the full-workspace variant).
 resources:
   jobs:
     baunorm_pipeline:
-      name: "[${var.env}] baunorm RAG pipeline"
+      name: "[${var.env}] baunorm RAG retrieval-core pipeline"
       tags:
         project: baunorm
         env: ${var.env}
-      job_clusters:
-        - job_cluster_key: pipeline
-          new_cluster:
-            spark_version: 15.4.x-scala2.12
-            node_type_id: Standard_DS3_v2
-            num_workers: 1
-            data_security_mode: SINGLE_USER
+      # No job_clusters: notebook tasks run on serverless automatically.
       parameters:
         - name: env
           default: ${var.env}
+        - name: catalog
+          default: ${var.catalog}
+        - name: embedding_mode
+          default: managed
       tasks:
         - task_key: synthesize_corpus
-          job_cluster_key: pipeline
           notebook_task:
             notebook_path: ../notebooks/01_synthesize_corpus.py
             base_parameters:
               env: ${var.env}
+              catalog: ${var.catalog}
+              embedding_mode: managed
 
         - task_key: build_index
           depends_on:
             - task_key: synthesize_corpus
-          job_cluster_key: pipeline
           notebook_task:
             notebook_path: ../notebooks/02_build_index.py
             base_parameters:
               env: ${var.env}
+              catalog: ${var.catalog}
+              embedding_mode: managed
 
-        - task_key: deploy_agent
+        - task_key: rag_smoke
           depends_on:
             - task_key: build_index
-          job_cluster_key: pipeline
           notebook_task:
-            notebook_path: ../notebooks/03_log_and_deploy_agent.py
+            notebook_path: ../notebooks/05_rag_smoke.py
             base_parameters:
               env: ${var.env}
-
-        - task_key: evaluate
-          depends_on:
-            - task_key: deploy_agent
-          job_cluster_key: pipeline
-          notebook_task:
-            notebook_path: ../notebooks/04_evaluate.py
-            base_parameters:
-              env: ${var.env}
+              catalog: ${var.catalog}
+              embedding_mode: managed

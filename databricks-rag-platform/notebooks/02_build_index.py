@@ -20,8 +20,13 @@ import sys
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.getcwd(), "..")))
 
-dbutils.widgets.text("env", "dev")
-os.environ["BAUNORM_ENV"] = dbutils.widgets.get("env")
+for _w, _default in (("env", "dev"), ("catalog", ""), ("embedding_mode", "")):
+    dbutils.widgets.text(_w, _default)
+os.environ["BAUNORM_ENV"] = dbutils.widgets.get("env") or "dev"
+if dbutils.widgets.get("catalog"):
+    os.environ["BAUNORM_CATALOG"] = dbutils.widgets.get("catalog")
+if dbutils.widgets.get("embedding_mode"):
+    os.environ["EMBEDDING_MODE"] = dbutils.widgets.get("embedding_mode")
 
 from src.config import (  # noqa: E402
     CHUNK_ID_COLUMN,
@@ -116,7 +121,7 @@ try:
     index.sync()
     print(f"Index exists — triggered sync: {cfg.normen_index}")
 except Exception:
-    vsc.create_delta_sync_index(
+    kwargs = dict(
         endpoint_name=VECTOR_SEARCH_ENDPOINT,
         index_name=cfg.normen_index,
         source_table_name=cfg.normen_chunks,
@@ -124,19 +129,40 @@ except Exception:
         primary_key=CHUNK_ID_COLUMN,
         embedding_source_column=CHUNK_TEXT_COLUMN,
         embedding_model_endpoint_name=emb_endpoint,
-        embedding_dimension=EMBEDDING_DIMENSION,
     )
+    # For a Databricks-managed embedding endpoint the dimension is inferred; only
+    # pass it explicitly for a self-hosted model.
+    if EMBEDDING_MODE != "managed":
+        kwargs["embedding_dimension"] = EMBEDDING_DIMENSION
+    vsc.create_delta_sync_index(**kwargs)
     print(f"Created Delta Sync index: {cfg.normen_index}")
 
 # COMMAND ----------
-# MAGIC %md ## 4. Smoke test the index
-# MAGIC (Run after the index reaches ONLINE — first sync can take a few minutes.)
+# MAGIC %md ## 4. Wait until the index has finished its initial sync
+# MAGIC So the next pipeline task (RAG smoke test) can query it immediately.
+
+# COMMAND ----------
+import time
+
+idx = vsc.get_index(VECTOR_SEARCH_ENDPOINT, cfg.normen_index)
+for _ in range(60):  # up to ~10 min
+    status = idx.describe().get("status", {})
+    ready = status.get("ready", False)
+    detail = status.get("detailed_state", status.get("message", ""))
+    print(f"index ready={ready}  state={detail}")
+    if ready:
+        break
+    time.sleep(10)
+else:
+    print("WARNING: index not ready after wait — smoke test below may be empty.")
+
+# COMMAND ----------
+# MAGIC %md ## 5. Smoke test the index
 
 # COMMAND ----------
 from src.config import RETRIEVE_COLUMNS, TOP_K  # noqa: E402
 
 try:
-    idx = vsc.get_index(VECTOR_SEARCH_ENDPOINT, cfg.normen_index)
     res = idx.similarity_search(
         query_text="Was bedeutet feuerbeständig?",
         columns=RETRIEVE_COLUMNS,

@@ -18,8 +18,15 @@ import sys
 # Make the bundled src/ importable regardless of where the notebook runs from.
 sys.path.insert(0, os.path.abspath(os.path.join(os.getcwd(), "..")))
 
-dbutils.widgets.text("env", "dev")
-os.environ["BAUNORM_ENV"] = dbutils.widgets.get("env")
+# Widgets -> env vars, read by src/config.py. `catalog` pins an existing UC
+# catalog (e.g. `workspace`); `embedding_mode` selects managed vs self-hosted.
+for _w, _default in (("env", "dev"), ("catalog", ""), ("embedding_mode", "")):
+    dbutils.widgets.text(_w, _default)
+os.environ["BAUNORM_ENV"] = dbutils.widgets.get("env") or "dev"
+if dbutils.widgets.get("catalog"):
+    os.environ["BAUNORM_CATALOG"] = dbutils.widgets.get("catalog")
+if dbutils.widgets.get("embedding_mode"):
+    os.environ["EMBEDDING_MODE"] = dbutils.widgets.get("embedding_mode")
 
 from src.config import GENERATION_MODEL, config  # noqa: E402
 from src import corpus_synth as cs  # noqa: E402
@@ -36,12 +43,17 @@ from pathlib import Path
 
 from pyspark.sql import Row
 
-# data.csv sits at the repo root, two levels up from notebooks/.
-seed_path = Path(os.getcwd()).resolve().parents[1] / "data.csv"
+# Seed CSV ships inside the bundle (synced copy of the repo-root data.csv) so it
+# is available in the workspace regardless of sync root.
+seed_path = Path(os.getcwd()).resolve().parents[0] / "data" / "seed_normen.csv"
 with open(seed_path, encoding="utf-8") as f:
     seed_rows = [cs.to_verified_record(r) for r in csv.DictReader(f)]
 
-spark.sql(f"CREATE CATALOG IF NOT EXISTS {cfg.catalog}")
+# Only try to create the catalog when we're not pinned to an existing one — on a
+# serverless/Free workspace you deploy into the existing `workspace` catalog and
+# lack CREATE CATALOG.
+if not os.environ.get("BAUNORM_CATALOG"):
+    spark.sql(f"CREATE CATALOG IF NOT EXISTS {cfg.catalog}")
 spark.sql(f"CREATE SCHEMA IF NOT EXISTS {cfg.catalog}.{cfg.curated_schema}")
 spark.sql(f"CREATE SCHEMA IF NOT EXISTS {cfg.catalog}.{cfg.ml_schema}")
 

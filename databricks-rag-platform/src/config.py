@@ -60,7 +60,12 @@ class Catalog:
 
     @property
     def catalog(self) -> str:
-        # dev/staging use a suffixed catalog; prod keeps the clean name.
+        # BAUNORM_CATALOG pins an existing catalog (e.g. the workspace-managed
+        # `workspace` catalog on serverless/Free workspaces where you can't create
+        # a new catalog). Otherwise dev/staging suffix; prod keeps the clean name.
+        override = os.environ.get("BAUNORM_CATALOG")
+        if override:
+            return override
         return self.base_catalog if self.env == "prod" else f"{self.base_catalog}_{self.env}"
 
     def _fq(self, schema: str, obj: str) -> str:
