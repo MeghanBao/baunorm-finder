@@ -65,15 +65,24 @@ QUESTIONS = [
     "Wo ist die Mindestbewehrung im Stahlbeton geregelt?",
 ]
 
+import json
+
+results = []
 for q in QUESTIONS:
     resp = agent.predict([ChatAgentMessage(role="user", content=q)])
     out = resp.custom_outputs or {}
+    answer = resp.messages[-1].content
+    cites = [f"{c['badge']} {c['norm']} {c.get('abschnitt','')}".strip() for c in out.get("citations", [])]
     print("=" * 80)
     print("Frage:   ", q)
     print("Grounded:", out.get("grounded"))
-    print("Antwort: ", resp.messages[-1].content)
-    for c in out.get("citations", []):
-        print(f"  · {c['badge']}  {c['norm']} {c.get('abschnitt','')}")
+    print("Antwort: ", answer)
+    for c in cites:
+        print("  ·", c)
+    results.append({"frage": q, "grounded": out.get("grounded"), "antwort": answer, "zitate": cites})
+
+# Return a structured summary so the run output is retrievable via the Jobs API.
+dbutils.notebook.exit(json.dumps(results, ensure_ascii=False))
 
 # COMMAND ----------
 # MAGIC %md
