@@ -102,14 +102,27 @@ print("Review App URL:", deployment.review_app_url)
 
 # COMMAND ----------
 import json
+import time
 
 from mlflow.deployments import get_deploy_client
 
 client = get_deploy_client("databricks")
-resp = client.predict(
-    endpoint=deployment.endpoint_name,
-    inputs={"messages": [{"role": "user", "content": "Was bedeutet feuerbeständig?"}]},
-)
+
+# Endpoint provisioning takes several minutes after agents.deploy returns; retry.
+resp = None
+for attempt in range(60):  # up to ~20 min
+    try:
+        resp = client.predict(
+            endpoint=deployment.endpoint_name,
+            inputs={"messages": [{"role": "user", "content": "Was bedeutet feuerbeständig?"}]},
+        )
+        print(f"Endpoint answered after {attempt} retries.")
+        break
+    except Exception as e:
+        print(f"  endpoint not ready yet ({attempt}): {str(e)[:100]}")
+        time.sleep(20)
+else:
+    raise RuntimeError("Agent serving endpoint did not become ready within the wait window.")
 print(resp)
 
 answer = ""

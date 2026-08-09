@@ -30,16 +30,30 @@ from mlflow.types.agent import (
     ChatContext,
 )
 
-from .config import (
-    AGENT_SERVING_ENDPOINT,
-    GENERATION_MODEL,
-    PROVENANCE_LABELS,
-    PROVENANCE_SYNTHETIC,
-    RETRIEVE_COLUMNS,
-    TOP_K,
-    VECTOR_SEARCH_ENDPOINT,
-    config,
-)
+# Import works both as a package (tests: `from src.agent import ...`) and when
+# MLflow model-from-code execs this file standalone with src/ on sys.path.
+try:
+    from .config import (
+        AGENT_SERVING_ENDPOINT,
+        GENERATION_MODEL,
+        PROVENANCE_LABELS,
+        PROVENANCE_SYNTHETIC,
+        RETRIEVE_COLUMNS,
+        TOP_K,
+        VECTOR_SEARCH_ENDPOINT,
+        config,
+    )
+except ImportError:  # loaded as a standalone model-from-code file
+    from config import (
+        AGENT_SERVING_ENDPOINT,
+        GENERATION_MODEL,
+        PROVENANCE_LABELS,
+        PROVENANCE_SYNTHETIC,
+        RETRIEVE_COLUMNS,
+        TOP_K,
+        VECTOR_SEARCH_ENDPOINT,
+        config,
+    )
 
 SYSTEM_PROMPT = (
     "Du bist ein Assistent für deutsche Bau-Normen (DIN, DIN EN Eurocodes mit "
