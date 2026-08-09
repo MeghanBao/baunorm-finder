@@ -73,6 +73,9 @@ with mlflow.start_run(run_name=f"baunorm-rag-{cfg.env}"):
             "mlflow",
             "databricks-vectorsearch",
             "databricks-sdk",
+            # get_open_ai_client() returns an openai.OpenAI client, so the serving
+            # container needs the openai package too.
+            "openai",
         ],
     )
 print("Logged:", logged.model_uri)
@@ -110,21 +113,33 @@ import time
 
 from mlflow.deployments import get_deploy_client
 
-client = get_deploy_client("databricks")
+from databricks.sdk import WorkspaceClient
 
-# Endpoint provisioning takes several minutes after agents.deploy returns; retry.
+client = get_deploy_client("databricks")
+w = WorkspaceClient()
+
+# Endpoint provisioning takes several minutes after agents.deploy returns. Poll
+# the endpoint state so we fail fast on a build error instead of blindly retrying.
 resp = None
-for attempt in range(60):  # up to ~20 min
-    try:
+for attempt in range(90):  # up to ~30 min
+    ep = w.serving_endpoints.get(deployment.endpoint_name)
+    cfg_update = str(getattr(ep.state, "config_update", ""))
+    ready = str(getattr(ep.state, "ready", ""))
+    print(f"  [{attempt}] ready={ready} config_update={cfg_update}")
+    if "FAILED" in cfg_update:
+        # Surface the served-entity failure message for a fast, actionable error.
+        detail = ""
+        for se in (ep.config.served_entities if ep.config else []) or []:
+            detail = getattr(se.state, "deployment_state_message", "") or detail
+        raise RuntimeError(f"Agent endpoint build failed: {detail}")
+    if "READY" in ready:
         resp = client.predict(
             endpoint=deployment.endpoint_name,
             inputs={"messages": [{"role": "user", "content": "Was bedeutet feuerbeständig?"}]},
         )
-        print(f"Endpoint answered after {attempt} retries.")
+        print(f"Endpoint READY after {attempt} polls.")
         break
-    except Exception as e:
-        print(f"  endpoint not ready yet ({attempt}): {str(e)[:100]}")
-        time.sleep(20)
+    time.sleep(20)
 else:
     raise RuntimeError("Agent serving endpoint did not become ready within the wait window.")
 print(resp)
