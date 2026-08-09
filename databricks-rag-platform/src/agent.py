@@ -30,30 +30,70 @@ from mlflow.types.agent import (
     ChatContext,
 )
 
-# Import works both as a package (tests: `from src.agent import ...`) and when
-# MLflow model-from-code execs this file standalone with src/ on sys.path.
-try:
-    from .config import (
-        AGENT_SERVING_ENDPOINT,
-        GENERATION_MODEL,
-        PROVENANCE_LABELS,
-        PROVENANCE_SYNTHETIC,
-        RETRIEVE_COLUMNS,
-        TOP_K,
-        VECTOR_SEARCH_ENDPOINT,
-        config,
-    )
-except ImportError:  # loaded as a standalone model-from-code file
-    from config import (
-        AGENT_SERVING_ENDPOINT,
-        GENERATION_MODEL,
-        PROVENANCE_LABELS,
-        PROVENANCE_SYNTHETIC,
-        RETRIEVE_COLUMNS,
-        TOP_K,
-        VECTOR_SEARCH_ENDPOINT,
-        config,
-    )
+# Provenance vocabulary (mirrors src/config.py). Inlined so the served model
+# never has to import a repo module at load time.
+PROVENANCE_SYNTHETIC = "synthetic"
+PROVENANCE_LABELS = {"verified": "✅ verifiziert", "synthetic": "⚠ synthetisch"}
+
+
+def _runtime_config() -> dict:
+    """Resolve runtime params (model/index/endpoint names) without importing a
+    repo module at serving time.
+
+    Priority: (1) the `model_config` baked into the logged model (serving), then
+    (2) src/config.py for local dev + tests, then (3) safe defaults. This is what
+    makes the served model self-contained — the earlier `from config import ...`
+    failed at serving with "No module named 'config'".
+    """
+    defaults = {
+        "generation_model": "databricks-meta-llama-3-3-70b-instruct",
+        "vector_search_endpoint": "baunorm-vs",
+        "index_name": "workspace.curated.normen_index",
+        "top_k": 5,
+        "retrieve_columns": ["chunk_id", "norm", "abschnitt", "chunk", "provenance", "wert"],
+    }
+    try:  # (1) values logged with the model
+        from mlflow.models import ModelConfig
+
+        d = dict(ModelConfig().to_dict())
+        if d.get("index_name"):
+            return {**defaults, **d}
+    except Exception:  # noqa: BLE001 — no logged config in this context
+        pass
+    try:  # (2) local/package context (tests, notebooks)
+        try:
+            from .config import (
+                GENERATION_MODEL,
+                RETRIEVE_COLUMNS,
+                TOP_K,
+                VECTOR_SEARCH_ENDPOINT,
+                config,
+            )
+        except ImportError:
+            from config import (  # type: ignore
+                GENERATION_MODEL,
+                RETRIEVE_COLUMNS,
+                TOP_K,
+                VECTOR_SEARCH_ENDPOINT,
+                config,
+            )
+        return {
+            "generation_model": GENERATION_MODEL,
+            "vector_search_endpoint": VECTOR_SEARCH_ENDPOINT,
+            "index_name": config().normen_index,
+            "top_k": TOP_K,
+            "retrieve_columns": RETRIEVE_COLUMNS,
+        }
+    except Exception:  # noqa: BLE001
+        return defaults
+
+
+_RT = _runtime_config()
+GENERATION_MODEL = _RT["generation_model"]
+VECTOR_SEARCH_ENDPOINT = _RT["vector_search_endpoint"]
+RETRIEVE_COLUMNS = _RT["retrieve_columns"]
+TOP_K = _RT["top_k"]
+INDEX_NAME = _RT["index_name"]
 
 SYSTEM_PROMPT = (
     "Du bist ein Assistent für deutsche Bau-Normen (DIN, DIN EN Eurocodes mit "
@@ -134,7 +174,6 @@ class BaunormRagAgent(ChatAgent):
     """
 
     def __init__(self) -> None:
-        self.cfg = config()
         self._vs_index = None
         self._llm = None
 
@@ -144,7 +183,7 @@ class BaunormRagAgent(ChatAgent):
             from databricks.vector_search.client import VectorSearchClient
 
             self._vs_index = VectorSearchClient(disable_notice=True).get_index(
-                VECTOR_SEARCH_ENDPOINT, self.cfg.normen_index
+                VECTOR_SEARCH_ENDPOINT, INDEX_NAME
             )
         return self._vs_index
 
@@ -222,5 +261,4 @@ __all__ = [
     "build_prompt",
     "format_citations",
     "format_context",
-    "AGENT_SERVING_ENDPOINT",
 ]

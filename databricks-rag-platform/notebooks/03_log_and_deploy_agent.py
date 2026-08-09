@@ -62,18 +62,27 @@ input_example = {
     "messages": [{"role": "user", "content": "Was bedeutet feuerbeständig?"}]
 }
 
+# Runtime params baked into the model so the served agent needs no repo module.
+# agent.py reads these via mlflow.models.ModelConfig at load time.
+model_config = {
+    "generation_model": GENERATION_MODEL,
+    "vector_search_endpoint": VECTOR_SEARCH_ENDPOINT,
+    "index_name": cfg.normen_index,
+    "top_k": 5,
+    "retrieve_columns": ["chunk_id", "norm", "abschnitt", "chunk", "provenance", "wert"],
+}
+
 with mlflow.start_run(run_name=f"baunorm-rag-{cfg.env}"):
     logged = mlflow.pyfunc.log_model(
         artifact_path="agent",
         python_model=os.path.abspath(os.path.join(os.getcwd(), "..", "src", "agent.py")),
-        code_paths=[os.path.abspath(os.path.join(os.getcwd(), "..", "src"))],
+        model_config=model_config,  # no code_paths: agent.py is self-contained
         resources=resources,
         input_example=input_example,
-        # extra_ (not pip_requirements): let MLflow infer the base env (mlflow,
-        # pandas, cloudpickle, pydantic, ChatAgent runtime) and ADD our deps on
-        # top. An explicit pip_requirements dropped inferred packages and the
-        # served model failed to load.
+        # extra_ (not pip_requirements): keep MLflow's inferred base env and ADD
+        # our deps on top (explicit pip_requirements dropped inferred packages).
         extra_pip_requirements=[
+            "databricks-agents",  # ChatAgent serving runtime
             "databricks-vectorsearch",
             "databricks-sdk",
             "openai",  # get_open_ai_client() returns an openai.OpenAI client
@@ -87,6 +96,42 @@ print("Logged:", logged.model_uri)
 # COMMAND ----------
 registered = mlflow.register_model(model_uri=logged.model_uri, name=cfg.agent_model)
 print(f"Registered {cfg.agent_model} v{registered.version}")
+
+# COMMAND ----------
+# MAGIC %md ## 2b. Validate the model in a fresh serving-like env
+# MAGIC Reproduce the serving environment with `env_manager="uv"` and run the model
+# MAGIC BEFORE the ~15-min endpoint build, so any missing dependency surfaces here
+# MAGIC with the real ModuleNotFoundError instead of an opaque endpoint failure.
+
+# COMMAND ----------
+# Capture at the FD level so the prediction SUBPROCESS's stderr (where the real
+# ModuleNotFoundError lives) is recorded, not just Python-level stdout.
+import os
+
+_cap = "/tmp/env_validation.log"
+_fd = os.open(_cap, os.O_WRONLY | os.O_CREAT | os.O_TRUNC)
+_o1, _o2 = os.dup(1), os.dup(2)
+os.dup2(_fd, 1)
+os.dup2(_fd, 2)
+_ok, _exc = True, ""
+try:
+    mlflow.models.predict(
+        model_uri=logged.model_uri, input_data=input_example, env_manager="uv"
+    )
+except Exception as e:  # noqa: BLE001
+    _ok, _exc = False, str(e)[:400]
+finally:
+    os.dup2(_o1, 1)
+    os.dup2(_o2, 2)
+    os.close(_fd)
+
+_out = open(_cap, encoding="utf-8", errors="replace").read()
+# Surface the most relevant lines up front.
+_hits = [l for l in _out.splitlines() if any(k in l for k in ("ModuleNotFoundError", "No module named", "ImportError", "ERROR", "error:", "Cannot install", "conflict"))]
+print("\n".join(_hits[-40:]))
+if not _ok:
+    dbutils.notebook.exit("ENV_VALIDATION_FAILED\n--- hits ---\n" + "\n".join(_hits[-40:]) + "\n--- exc ---\n" + _exc)
+print("Env validation OK.")
 
 # COMMAND ----------
 # MAGIC %md ## 3. Deploy to Model Serving (Review App + Inference Tables)
