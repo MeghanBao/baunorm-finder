@@ -59,9 +59,9 @@ Alles bleibt innerhalb von Databricks + Unity Catalog — **kein externer LLM-Au
 
 | Zweck | Endpoint | Hinweis |
 |---|---|---|
-| Generation | `databricks-meta-llama-3-3-70b-instruct` | Databricks-nativ, pay-per-token; per `GENERATION_MODEL` austauschbar |
-| Embeddings (Standard) | self-hosted `intfloat/multilingual-e5-large` | mehrsprachig (Deutsch), 1024-dim |
-| Embeddings (Fallback) | `databricks-gte-large-en` | Null-Setup, `EMBEDDING_MODE=managed` |
+| Generation (Standard) | `databricks-meta-llama-3-1-8b-instruct` | klein/günstig; per `GENERATION_MODEL` austauschbar (z. B. `...-3-3-70b-instruct` für bessere Qualität) |
+| Embeddings (Standard, managed) | `databricks-gte-large-en` | Null-Setup, `EMBEDDING_MODE=managed`, 1024-dim |
+| Embeddings (Voll-Workspace) | self-hosted `intfloat/multilingual-e5-large` | mehrsprachig (Deutsch), `EMBEDDING_MODE=self_hosted` |
 
 ---
 
@@ -78,31 +78,40 @@ Ehrlichkeit des Ursprungsprojekts (geprüft vs. Platzhalter) erhalten.
 
 ## Deployment (Runbook)
 
-Voraussetzungen: Databricks CLI (v0.230+) mit Workspace-Auth; Serverless bzw.
-Cluster-Recht, Unity Catalog, Vector Search und Model Serving aktiviert.
+Voraussetzungen: Databricks CLI (v0.230+) mit Workspace-Auth; Unity Catalog,
+Vector Search und Model Serving verfügbar.
+
+**Serverless / Free-Edition-Workspace (Standard hier).** Ein einzelner managed
+`workspace`-Katalog, keine klassischen Cluster, managed Embeddings. Der aktive
+Bundle-Teil (`resources/jobs.yml` + `resources/agent_deploy.yml`) ist genau darauf
+ausgelegt (`var.catalog=workspace`, serverless Tasks, `EMBEDDING_MODE=managed`):
 
 ```bash
 cd databricks-rag-platform
+export DATABRICKS_CONFIG_PROFILE=<dein-profil>
 
-# 1. Bundle prüfen und ins dev-Ziel deployen
-databricks bundle validate
-databricks bundle deploy -t dev
-
-# 2. Gesamte Pipeline laufen lassen: synthesize → index → deploy → evaluate
+# 1. Retrieval-Kern: synthesize -> build_index -> rag_smoke (serverless)
+databricks bundle validate -t dev
+databricks bundle deploy  -t dev
 databricks bundle run baunorm_pipeline -t dev
 
-# 3. (einmalig) Lakebase-Secret für die App setzen – siehe ../baunorm-lakebase-app
-python ../baunorm-lakebase-app/setup_secrets.py
+# 2. Agent als Model-Serving-Endpoint deployen (Review App + Inference Tables)
+databricks bundle run baunorm_agent_deploy -t dev
 ```
 
-Nach dem Lauf:
-- `<catalog>.curated.normen` enthält verifizierte + synthetische Zeilen mit Provenance,
-- der Vector-Search-Index `normen_index` ist `ONLINE`,
-- der Agent-Serving-Endpoint `baunorm-rag-agent` ist `READY`,
-- Evaluationsmetriken liegen in MLflow (Deployment ist Schwellen-gegated).
+Ergebnis (verifiziert):
+- `workspace.curated.normen` / `normen_chunks` mit Provenance,
+- Vector-Search-Endpoint `baunorm-vs` + Index `normen_index` (`ONLINE`),
+- Agent-Serving-Endpoint `agents_workspace-ml-baunorm_rag_agent` (`READY`) inkl.
+  **Review-App-Chat-URL** — beantwortet deutsche Fragen mit Provenance-Zitaten.
 
-Promotion nach `staging` / `prod`: `databricks bundle deploy -t staging` bzw. `-t prod`
-(eigener, per Env-Suffix isolierter Katalog `baunorm_staging` / `baunorm`).
+**Kosten/Abbau:** Vector Search + Serving werden stündlich berechnet. Stoppen mit
+`databricks bundle destroy -t dev` und Löschen des `baunorm-vs`-Endpoints.
+
+**Voller Workspace.** Für eigenen Katalog, self-hosted multilinguale Embeddings und
+die Databricks-App die Definitionen unter `resources/full-workspace/` wieder in
+`include:` aufnehmen und gegen einen Workspace mit den passenden Fähigkeiten
+deployen.
 
 ---
 

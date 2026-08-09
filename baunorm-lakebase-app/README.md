@@ -1,5 +1,10 @@
 # baunorm-finder als Databricks App (Lakebase-Variante)
 
+> **Live (Databricks App):** die RAG-Chat-Oberfläche läuft als Databricks App und
+> fragt den deployten Agent-Serving-Endpoint (`agents_workspace-ml-baunorm_rag_agent`).
+> **Lakebase ist optional** (`LAKEBASE_ENABLED`): ohne Postgres funktioniert der
+> RAG-Chat (`/api/ask`) weiter, nur Stichwortsuche/Feedback/Seed sind still gelegt.
+
 Dieselbe Stichwort-zu-Wert-Suche für deutsche Bau-Normen wie das
 [Hauptprojekt](../README.md), aber als **Databricks App** gebaut:
 

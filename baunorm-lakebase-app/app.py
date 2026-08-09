@@ -39,6 +39,11 @@ DATA_FILE = BASE_DIR / "data.csv"
 TABLE_NAME = os.environ.get("NORMEN_TABLE_NAME", "normen")
 FEEDBACK_TABLE = os.environ.get("FEEDBACK_TABLE_NAME", "baunorm_feedback")
 
+# Lakebase is optional. When disabled (no Postgres wired), the RAG chat (/api/ask)
+# still works against the agent endpoint; keyword search / feedback / seed — the
+# Lakebase-backed features — degrade gracefully instead of erroring.
+LAKEBASE_ENABLED = os.environ.get("LAKEBASE_ENABLED", "0") == "1"
+
 # CSV-Spalten (data.csv) -> Postgres-Spalten. Halten die deutschen Feldnamen des
 # Originalprojekts bei, damit data.csv unverändert übernommen werden kann.
 _CSV_TO_DB = {
@@ -197,13 +202,15 @@ def healthz():
 @app.route("/")
 def index():
     """Minimal search UI for looking up German building standards."""
-    return render_template("index.html")
+    return render_template("index.html", lakebase_enabled=LAKEBASE_ENABLED)
 
 
 @app.route("/api/search")
 def search():
     """Keyword search across norm / section / keywords / summary (case-insensitive
     substring match, mirroring the original tool's behaviour)."""
+    if not LAKEBASE_ENABLED:
+        return jsonify({"total": 0, "results": [], "disabled": "lakebase"})
     ensure_normen_table()
     q = (request.args.get("q") or "").strip()
     if not q:
@@ -229,8 +236,7 @@ def search():
 @app.route("/api/ask", methods=["POST"])
 def ask():
     """Semantic RAG answer: query the deployed Mosaic AI agent, return the answer
-    with provenance-tagged citations, and log the exchange for audit/monitoring."""
-    ensure_feedback_table()
+    with provenance-tagged citations, and (if Lakebase is wired) log the exchange."""
     body = request.get_json(silent=True) or request.form.to_dict() or {}
     question = (body.get("q") or body.get("question") or "").strip()
     if not question:
@@ -240,11 +246,13 @@ def ask():
     result = rag.ask(question)
     latency_ms = int((time.monotonic() - started) * 1000)
 
-    try:
-        result["id"] = _log_question(question, result, latency_ms)
-    except Exception:  # never let audit logging break the user-facing answer
-        logger.exception("Failed to log question to feedback table")
-        result["id"] = None
+    result["id"] = None
+    if LAKEBASE_ENABLED:
+        try:  # audit logging is best-effort — never break the user-facing answer
+            ensure_feedback_table()
+            result["id"] = _log_question(question, result, latency_ms)
+        except Exception:
+            logger.exception("Failed to log question to feedback table")
     result["latency_ms"] = latency_ms
     return jsonify(result)
 
@@ -252,6 +260,8 @@ def ask():
 @app.route("/api/feedback", methods=["POST"])
 def feedback():
     """Attach a thumbs rating (+1 / -1) to a previously logged question."""
+    if not LAKEBASE_ENABLED:
+        return jsonify({"status": "disabled", "reason": "lakebase"})
     ensure_feedback_table()
     body = request.get_json(silent=True) or request.form.to_dict() or {}
     fid, rating = body.get("id"), body.get("rating")
@@ -267,6 +277,8 @@ def feedback():
 @app.route("/api/normen", methods=["GET"])
 def list_normen():
     """List all standards currently stored in Lakebase."""
+    if not LAKEBASE_ENABLED:
+        return jsonify({"total": 0, "results": [], "disabled": "lakebase"})
     ensure_normen_table()
     rows = lakebase.run_query(
         f"""
@@ -285,6 +297,8 @@ def upsert_norm():
     Accepts either the German field names (Norm, Abschnitt, ...) or the JSON
     contract names (code, article, keywords, summary, value, note).
     """
+    if not LAKEBASE_ENABLED:
+        return jsonify({"error": "Lakebase ist nicht konfiguriert"}), 503
     ensure_normen_table()
     body = request.get_json(silent=True) or request.form.to_dict() or {}
 
@@ -313,6 +327,8 @@ def seed():
     upstream API, so the CSV of officially verified standards (MVV TB 2025/1) is
     the seed, and Lakebase becomes the single source of truth from then on.
     """
+    if not LAKEBASE_ENABLED:
+        return jsonify({"error": "Lakebase ist nicht konfiguriert"}), 503
     ensure_normen_table()
     if not DATA_FILE.exists():
         return jsonify({"error": f"data.csv nicht gefunden unter {DATA_FILE}"}), 404
@@ -328,5 +344,6 @@ def seed():
 
 if __name__ == "__main__":
     host = os.getenv("FLASK_RUN_HOST", "0.0.0.0")
-    port = int(os.getenv("FLASK_RUN_PORT", 8000))
+    # Databricks Apps inject the port to bind via DATABRICKS_APP_PORT.
+    port = int(os.getenv("DATABRICKS_APP_PORT") or os.getenv("FLASK_RUN_PORT", "8000"))
     app.run(debug=bool(os.getenv("FLASK_DEBUG")), host=host, port=port)

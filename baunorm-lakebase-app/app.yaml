@@ -3,16 +3,18 @@ command:
   - "app.py"
 
 env:
-  # Lakebase: lakebase.py resolves the URL from this secret scope/key at runtime
-  # (base64-decoded via the Databricks SDK) when LAKEBASE_URL is not already set
-  # in the environment.
+  # RAG: the Mosaic AI agent serving endpoint the /api/ask route queries
+  # (the endpoint databricks.agents.deploy created for this workspace).
+  - name: AGENT_SERVING_ENDPOINT
+    value: "agents_workspace-ml-baunorm_rag_agent"
+  # Lakebase is OFF for this deploy: the RAG chat needs no database. Keyword
+  # search / feedback / seed degrade gracefully. To enable later, wire Lakebase
+  # and set LAKEBASE_ENABLED=1 (+ the secret scope/key below).
+  - name: LAKEBASE_ENABLED
+    value: "0"
   - name: LAKEBASE_SECRET_SCOPE
     value: "database"
   - name: LAKEBASE_SECRET_KEY
     value: "lakebase-url"
   - name: NORMEN_TABLE_NAME
     value: "normen"
-  # RAG: the Mosaic AI agent serving endpoint the /api/ask route queries.
-  # Matches AGENT_SERVING_ENDPOINT in databricks-rag-platform/src/config.py.
-  - name: AGENT_SERVING_ENDPOINT
-    value: "baunorm-rag-agent"

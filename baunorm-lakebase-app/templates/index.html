@@ -76,11 +76,11 @@
     <div id="ask_out"></div>
   </div>
 
-  <input id="q" placeholder="Stichwortsuche…" autofocus>
+  <input id="q" placeholder="Stichwortsuche…" {% if not lakebase_enabled %}style="display:none"{% endif %}>
   <div class="count" id="count"></div>
   <div id="results"></div>
 
-  <details>
+  <details {% if not lakebase_enabled %}style="display:none"{% endif %}>
     <summary>➕ Neue Norm erfassen / bearbeiten</summary>
     <div style="margin-top:14px">
       <div class="row">
@@ -225,7 +225,7 @@ $('seed').addEventListener('click', async () => {
   search('');
 });
 
-search('');
+{% if lakebase_enabled %}search('');{% else %}$('ask_q').focus();{% endif %}
 </script>
 </body>
 </html>

@@ -23,7 +23,9 @@ from dataclasses import dataclass, field
 # read from an env var so `config.py` never has to change to swap it — the DABs
 # target injects GENERATION_MODEL, and unit tests can override it too.
 GENERATION_MODEL = os.environ.get(
-    "GENERATION_MODEL", "databricks-meta-llama-3-3-70b-instruct"
+    # Smaller/cheaper default (per-token) for demo/cost; German quality is below
+    # llama-3-3-70b — swap back here or via the GENERATION_MODEL env var.
+    "GENERATION_MODEL", "databricks-meta-llama-3-1-8b-instruct"
 )
 
 # Embeddings: the corpus is German, so the default is a self-hosted multilingual
