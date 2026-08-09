@@ -16,8 +16,13 @@ import sys
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.getcwd(), "..")))
 
-dbutils.widgets.text("env", "dev")
-os.environ["BAUNORM_ENV"] = dbutils.widgets.get("env")
+for _w, _default in (("env", "dev"), ("catalog", ""), ("embedding_mode", "")):
+    dbutils.widgets.text(_w, _default)
+os.environ["BAUNORM_ENV"] = dbutils.widgets.get("env") or "dev"
+if dbutils.widgets.get("catalog"):
+    os.environ["BAUNORM_CATALOG"] = dbutils.widgets.get("catalog")
+if dbutils.widgets.get("embedding_mode"):
+    os.environ["EMBEDDING_MODE"] = dbutils.widgets.get("embedding_mode")
 
 from src.config import (  # noqa: E402
     GENERATION_MODEL,
@@ -96,6 +101,8 @@ print("Review App URL:", deployment.review_app_url)
 # MAGIC %md ## 4. Smoke test the live endpoint
 
 # COMMAND ----------
+import json
+
 from mlflow.deployments import get_deploy_client
 
 client = get_deploy_client("databricks")
@@ -104,3 +111,20 @@ resp = client.predict(
     inputs={"messages": [{"role": "user", "content": "Was bedeutet feuerbeständig?"}]},
 )
 print(resp)
+
+answer = ""
+try:
+    answer = (resp.get("messages") or [{}])[-1].get("content", "")
+except Exception:
+    answer = str(resp)[:500]
+
+dbutils.notebook.exit(
+    json.dumps(
+        {
+            "endpoint_name": deployment.endpoint_name,
+            "review_app_url": getattr(deployment, "review_app_url", ""),
+            "smoke_answer": answer,
+        },
+        ensure_ascii=False,
+    )
+)

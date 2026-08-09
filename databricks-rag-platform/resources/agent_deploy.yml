@@ -1,0 +1,18 @@
+# One-off job that logs the RAG agent to MLflow/UC and deploys it as a Model
+# Serving endpoint via databricks.agents.deploy. Separate from the retrieval-core
+# pipeline because custom Model Serving may not be available on every workspace.
+resources:
+  jobs:
+    baunorm_agent_deploy:
+      name: "[${var.env}] baunorm deploy RAG agent endpoint"
+      tags:
+        project: baunorm
+        env: ${var.env}
+      tasks:
+        - task_key: deploy_agent
+          notebook_task:
+            notebook_path: ../notebooks/03_log_and_deploy_agent.py
+            base_parameters:
+              env: ${var.env}
+              catalog: ${var.catalog}
+              embedding_mode: managed

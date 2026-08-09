@@ -29,6 +29,7 @@ variables:
 # resources/full-workspace/README notes.
 include:
   - resources/jobs.yml
+  - resources/agent_deploy.yml
 
 # Notebooks/modules read BAUNORM_ENV to resolve the catalog; keep it in one place.
 targets:
