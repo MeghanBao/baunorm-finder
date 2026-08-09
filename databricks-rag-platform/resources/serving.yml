@@ -1,0 +1,23 @@
+# Model Serving: the self-hosted multilingual embedding endpoint that Vector
+# Search calls. (The agent serving endpoint is created by databricks.agents.deploy
+# in notebook 03, not here, because it needs the logged model version.)
+#
+# Set EMBEDDING_MODE=managed in the target to skip this and use
+# databricks-gte-large-en instead (then Vector Search points at the managed one).
+resources:
+  model_serving_endpoints:
+    baunorm_e5_multilingual:
+      name: baunorm-e5-multilingual
+      config:
+        served_entities:
+          - name: e5-multilingual
+            # intfloat/multilingual-e5-large registered to UC (see notebook 02 header),
+            # served CPU/GPU-small; German-capable, 1024-dim to match the index schema.
+            entity_name: baunorm_${var.env}.ml.multilingual_e5_large
+            entity_version: "1"
+            workload_type: CPU
+            workload_size: Small
+            scale_to_zero_enabled: true
+      tags:
+        - key: project
+          value: baunorm

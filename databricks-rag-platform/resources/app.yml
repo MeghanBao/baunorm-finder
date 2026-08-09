@@ -1,0 +1,15 @@
+# The Databricks App (evolved Flask frontend). Source lives in the sibling
+# baunorm-lakebase-app/ folder; the app calls the agent serving endpoint for RAG
+# and Lakebase for audit/feedback logging.
+resources:
+  apps:
+    baunorm_app:
+      name: "baunorm-${var.env}"
+      description: "German building-standards RAG assistant (retrieval + citations + provenance)."
+      source_code_path: ../../baunorm-lakebase-app
+      resources:
+        - name: agent-endpoint
+          description: "RAG agent serving endpoint the app queries."
+          serving_endpoint:
+            name: baunorm-rag-agent
+            permission: CAN_QUERY

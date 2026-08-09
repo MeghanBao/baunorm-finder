@@ -1,0 +1,26 @@
+# Unity Catalog foundation: one catalog per environment, two schemas, one volume.
+# Governance lives here — grants are least-privilege and declared as code.
+resources:
+  schemas:
+    curated:
+      catalog_name: baunorm_${var.env}
+      name: curated
+      comment: "Norm corpus + retrieval objects (normen, normen_chunks, Vector Search index)."
+    ml:
+      catalog_name: baunorm_${var.env}
+      name: ml
+      comment: "Eval sets, registered RAG agent model, MLflow artifacts."
+
+  volumes:
+    raw_docs:
+      catalog_name: baunorm_${var.env}
+      schema_name: ${resources.schemas.curated.name}
+      name: raw_docs
+      comment: "Landing zone for future real source PDFs (MVV TB, Eurocode)."
+
+  registered_models:
+    baunorm_rag_agent:
+      catalog_name: baunorm_${var.env}
+      schema_name: ${resources.schemas.ml.name}
+      name: baunorm_rag_agent
+      comment: "RAG ChatAgent (retriever + Llama 3.3 70B) logged from notebook 03."

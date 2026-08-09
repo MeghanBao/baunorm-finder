@@ -1,0 +1,53 @@
+# The end-to-end pipeline as a single multi-task job: synthesize -> index ->
+# deploy -> evaluate. Tasks run in order; a failed eval gate stops promotion.
+resources:
+  jobs:
+    baunorm_pipeline:
+      name: "[${var.env}] baunorm RAG pipeline"
+      tags:
+        project: baunorm
+        env: ${var.env}
+      job_clusters:
+        - job_cluster_key: pipeline
+          new_cluster:
+            spark_version: 15.4.x-scala2.12
+            node_type_id: Standard_DS3_v2
+            num_workers: 1
+            data_security_mode: SINGLE_USER
+      parameters:
+        - name: env
+          default: ${var.env}
+      tasks:
+        - task_key: synthesize_corpus
+          job_cluster_key: pipeline
+          notebook_task:
+            notebook_path: ../notebooks/01_synthesize_corpus.py
+            base_parameters:
+              env: ${var.env}
+
+        - task_key: build_index
+          depends_on:
+            - task_key: synthesize_corpus
+          job_cluster_key: pipeline
+          notebook_task:
+            notebook_path: ../notebooks/02_build_index.py
+            base_parameters:
+              env: ${var.env}
+
+        - task_key: deploy_agent
+          depends_on:
+            - task_key: build_index
+          job_cluster_key: pipeline
+          notebook_task:
+            notebook_path: ../notebooks/03_log_and_deploy_agent.py
+            base_parameters:
+              env: ${var.env}
+
+        - task_key: evaluate
+          depends_on:
+            - task_key: deploy_agent
+          job_cluster_key: pipeline
+          notebook_task:
+            notebook_path: ../notebooks/04_evaluate.py
+            base_parameters:
+              env: ${var.env}

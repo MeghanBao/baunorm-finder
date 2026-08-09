@@ -1,0 +1,51 @@
+# Databricks Asset Bundle for the baunorm-finder enterprise RAG platform.
+#
+# One bundle defines the whole platform: Unity Catalog schemas/volumes, the
+# ingestion+index+deploy+eval jobs, the Vector Search endpoint, the Model Serving
+# endpoints (embedding + agent) and the Databricks App. `dev`/`staging`/`prod`
+# targets keep environments fully isolated (catalog is suffixed per env — see
+# src/config.py::Catalog).
+#
+# Deploy:  databricks bundle validate
+#          databricks bundle deploy -t dev
+#          databricks bundle run baunorm_pipeline -t dev
+bundle:
+  name: baunorm-rag-platform
+
+variables:
+  env:
+    description: Logical environment; folded into the catalog name (baunorm_dev / baunorm).
+    default: dev
+  warehouse_id:
+    description: SQL warehouse used by ai_query synthesis + index maintenance.
+    default: ""
+
+include:
+  - resources/*.yml
+
+# Notebooks/modules read BAUNORM_ENV to resolve the catalog; keep it in one place.
+targets:
+  dev:
+    mode: development
+    default: true
+    variables:
+      env: dev
+    workspace:
+      root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/dev
+
+  staging:
+    mode: production
+    variables:
+      env: staging
+    workspace:
+      root_path: /Workspace/Shared/.bundle/${bundle.name}/staging
+
+  prod:
+    mode: production
+    variables:
+      env: prod
+    workspace:
+      root_path: /Workspace/Shared/.bundle/${bundle.name}/prod
+    permissions:
+      - level: CAN_MANAGE
+        group_name: baunorm-admins
