@@ -32,6 +32,25 @@
   .note { margin-top: 6px; font-size: 12.5px; color: #b45309; background: #fffbeb;
     padding: 4px 8px; border-radius: 6px; display: inline-block; }
   mark { background: #fef08a; padding: 0 2px; }
+  .ask-box { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px;
+    padding: 16px 18px; margin-bottom: 20px; }
+  .ask-box h2 { font-size: 15px; margin-bottom: 8px; }
+  .ask-row { display: flex; gap: 10px; }
+  .ask-row input { margin-bottom: 0; }
+  .ask-row button { white-space: nowrap; }
+  .answer { margin-top: 14px; font-size: 14.5px; line-height: 1.6;
+    background: #f0f7ff; border-left: 3px solid #2563eb; padding: 10px 14px;
+    border-radius: 6px; white-space: pre-wrap; }
+  .cites { margin-top: 12px; }
+  .cite { font-size: 13px; padding: 6px 10px; border: 1px solid #e5e7eb;
+    border-radius: 8px; margin-bottom: 6px; display: flex; gap: 8px; align-items: center; }
+  .badge { font-size: 11px; padding: 2px 8px; border-radius: 999px; font-weight: 600; }
+  .badge.verified { background: #dcfce7; color: #166534; }
+  .badge.synthetic { background: #fef3c7; color: #92400e; }
+  .fb { margin-top: 10px; font-size: 13px; color: #666; }
+  .fb button { background: #f3f4f6; color: #333; padding: 4px 10px; font-size: 13px; }
+  .disclaimer { margin-top: 8px; font-size: 12px; color: #92400e;
+    background: #fffbeb; padding: 6px 10px; border-radius: 6px; }
   .empty { color: #999; text-align: center; padding: 40px 0; }
   details { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px;
     padding: 14px 18px; margin: 18px 0; }
@@ -48,7 +67,16 @@
   <h1>📖 Normen-Nachschlage-Tool <span style="font-size:12px;color:#999">· Lakebase</span></h1>
   <div class="sub">Stichwort eingeben (z. B. Mindestbewehrung), Enter drücken. Daten liegen in Lakebase (Postgres) und werden über diese App gepflegt.</div>
 
-  <input id="q" placeholder="Suchbegriff eingeben…" autofocus>
+  <div class="ask-box">
+    <h2>💬 Fragen (RAG)</h2>
+    <div class="ask-row">
+      <input id="ask_q" placeholder="Frage stellen, z. B. Was bedeutet feuerbeständig?">
+      <button id="ask_btn">Fragen</button>
+    </div>
+    <div id="ask_out"></div>
+  </div>
+
+  <input id="q" placeholder="Stichwortsuche…" autofocus>
   <div class="count" id="count"></div>
   <div id="results"></div>
 
@@ -111,6 +139,62 @@ $('q').addEventListener('input', () => {
   clearTimeout(timer);
   timer = setTimeout(() => search($('q').value.trim()), 150);
 });
+
+function esc(s) {
+  return (s || '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+}
+
+function renderCitations(cites) {
+  if (!cites || !cites.length) return '';
+  const rows = cites.map(c => {
+    const cls = c.is_synthetic ? 'synthetic' : 'verified';
+    return `<div class="cite">
+      <span class="badge ${cls}">${esc(c.badge)}</span>
+      <span><strong>${esc(c.norm)}</strong>${c.abschnitt ? ' · ' + esc(c.abschnitt) : ''}</span>
+    </div>`;
+  }).join('');
+  const hasSynthetic = cites.some(c => c.is_synthetic);
+  const warn = hasSynthetic
+    ? `<div class="disclaimer">⚠ Enthält synthetische Beispieldaten – kein amtlicher Normwert. Vor Verwendung im Originalnormtext prüfen.</div>`
+    : '';
+  return `<div class="cites"><div class="count">Quellen:</div>${rows}${warn}</div>`;
+}
+
+async function ask() {
+  const q = $('ask_q').value.trim();
+  if (!q) return;
+  $('ask_out').innerHTML = '<div class="answer">Denke nach…</div>';
+  try {
+    const resp = await fetch('/api/ask', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ q }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) { $('ask_out').innerHTML = `<div class="disclaimer">Fehler: ${esc(data.error || resp.statusText)}</div>`; return; }
+    const fb = data.id != null
+      ? `<div class="fb" id="fb">War die Antwort hilfreich?
+           <button onclick="rate(${data.id}, 1)">👍</button>
+           <button onclick="rate(${data.id}, -1)">👎</button></div>`
+      : '';
+    $('ask_out').innerHTML = `<div class="answer">${esc(data.answer)}</div>${renderCitations(data.citations)}${fb}`;
+  } catch (e) {
+    $('ask_out').innerHTML = `<div class="disclaimer">Netzwerkfehler: ${esc(String(e))}</div>`;
+  }
+}
+
+async function rate(id, rating) {
+  await fetch('/api/feedback', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id, rating }),
+  });
+  const fb = $('fb');
+  if (fb) fb.textContent = 'Danke für das Feedback!';
+}
+
+$('ask_btn').addEventListener('click', ask);
+$('ask_q').addEventListener('keydown', e => { if (e.key === 'Enter') ask(); });
 
 $('save').addEventListener('click', async () => {
   const norm = $('f_norm').value.trim();

@@ -32,9 +32,17 @@ Dieselbe Stichwort-zu-Wert-Suche für deutsche Bau-Normen wie das
 | `GET /healthz` | Health-Check |
 | `GET /` | Such-UI |
 | `GET /api/search?q=` | Stichwortsuche (norm/abschnitt/stichworte/zusammenfassung, ILIKE) |
+| `POST /api/ask` | **RAG-Antwort** vom Mosaic AI Agenten (Antwort + Zitate mit Herkunfts-Badge); loggt in `baunorm_feedback` |
+| `POST /api/feedback` | Daumen-Bewertung (+1/-1) zu einer geloggten Frage nachtragen |
 | `GET /api/normen` | Alle Einträge auflisten |
 | `POST /api/normen` | Einen Eintrag anlegen/aktualisieren (UPSERT auf `(norm, abschnitt)`) |
 | `POST /api/seed` | `data.csv` einmalig in Lakebase laden |
+
+> `POST /api/ask` fragt den in
+> [`databricks-rag-platform/`](../databricks-rag-platform/README.md) deployten
+> Agent-Serving-Endpoint (`AGENT_SERVING_ENDPOINT`, Standard `baunorm-rag-agent`)
+> über den MLflow-Deployments-Client. Jede Frage/Antwort landet mit Zitaten und
+> Latenz in der CDF-fähigen Audit-Tabelle `baunorm_feedback` → Unity Catalog.
 
 ## Datenmodell
 

@@ -12,3 +12,7 @@ env:
     value: "lakebase-url"
   - name: NORMEN_TABLE_NAME
     value: "normen"
+  # RAG: the Mosaic AI agent serving endpoint the /api/ask route queries.
+  # Matches AGENT_SERVING_ENDPOINT in databricks-rag-platform/src/config.py.
+  - name: AGENT_SERVING_ENDPOINT
+    value: "baunorm-rag-agent"

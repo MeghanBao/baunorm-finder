@@ -15,14 +15,17 @@ Deploy als Databricks App über app.yaml.
 """
 
 import csv
+import json
 import logging
 import os
+import time
 from pathlib import Path
 
 from dotenv import load_dotenv
 from flask import Flask, jsonify, render_template, request
 
 import lakebase
+import rag
 
 load_dotenv()
 
@@ -34,6 +37,7 @@ app = Flask(__name__)
 BASE_DIR = Path(__file__).parent
 DATA_FILE = BASE_DIR / "data.csv"
 TABLE_NAME = os.environ.get("NORMEN_TABLE_NAME", "normen")
+FEEDBACK_TABLE = os.environ.get("FEEDBACK_TABLE_NAME", "baunorm_feedback")
 
 # CSV-Spalten (data.csv) -> Postgres-Spalten. Halten die deutschen Feldnamen des
 # Originalprojekts bei, damit data.csv unverändert übernommen werden kann.
@@ -125,6 +129,55 @@ def _upsert_normen(rows: list[dict]) -> int:
     return count
 
 
+def ensure_feedback_table() -> None:
+    """Create the CDF-ready audit/feedback table for RAG questions.
+
+    Every /api/ask writes one row here (query, answer, citations, latency); the
+    optional thumbs rating is filled in later by /api/feedback. REPLICA IDENTITY
+    FULL (via ensure_table_with_cdf) streams the whole audit trail into Unity
+    Catalog for Lakehouse Monitoring — the enterprise observability layer, reusing
+    the exact same CDF plumbing the `normen` table uses.
+    """
+    lakebase.ensure_table_with_cdf(
+        f"""
+        CREATE TABLE IF NOT EXISTS {FEEDBACK_TABLE} (
+            id BIGSERIAL PRIMARY KEY,
+            query TEXT NOT NULL,
+            answer TEXT NOT NULL DEFAULT '',
+            citations JSONB NOT NULL DEFAULT '[]'::jsonb,
+            grounded BOOLEAN NOT NULL DEFAULT true,
+            latency_ms INTEGER NOT NULL DEFAULT 0,
+            rating SMALLINT,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        )
+        """,
+        FEEDBACK_TABLE,
+    )
+
+
+def _log_question(query: str, result: dict, latency_ms: int) -> int:
+    """Insert an audit row and return its id so the UI can attach a thumbs rating."""
+    with lakebase.get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"""
+                INSERT INTO {FEEDBACK_TABLE} (query, answer, citations, grounded, latency_ms)
+                VALUES (%(q)s, %(a)s, %(c)s::jsonb, %(g)s, %(l)s)
+                RETURNING id
+                """,
+                {
+                    "q": query,
+                    "a": result.get("answer", ""),
+                    "c": json.dumps(result.get("citations", [])),
+                    "g": bool(result.get("grounded", True)),
+                    "l": latency_ms,
+                },
+            )
+            new_id = cur.fetchone()["id"]
+            conn.commit()
+    return new_id
+
+
 @app.errorhandler(Exception)
 def handle_exception(err):
     """Return all unhandled errors as JSON (not an HTML error page), so the
@@ -171,6 +224,44 @@ def search():
         {"like": like},
     )
     return jsonify({"total": len(rows), "results": [_row_to_result(r) for r in rows]})
+
+
+@app.route("/api/ask", methods=["POST"])
+def ask():
+    """Semantic RAG answer: query the deployed Mosaic AI agent, return the answer
+    with provenance-tagged citations, and log the exchange for audit/monitoring."""
+    ensure_feedback_table()
+    body = request.get_json(silent=True) or request.form.to_dict() or {}
+    question = (body.get("q") or body.get("question") or "").strip()
+    if not question:
+        return jsonify({"error": "Feld 'q' (Frage) ist erforderlich"}), 400
+
+    started = time.monotonic()
+    result = rag.ask(question)
+    latency_ms = int((time.monotonic() - started) * 1000)
+
+    try:
+        result["id"] = _log_question(question, result, latency_ms)
+    except Exception:  # never let audit logging break the user-facing answer
+        logger.exception("Failed to log question to feedback table")
+        result["id"] = None
+    result["latency_ms"] = latency_ms
+    return jsonify(result)
+
+
+@app.route("/api/feedback", methods=["POST"])
+def feedback():
+    """Attach a thumbs rating (+1 / -1) to a previously logged question."""
+    ensure_feedback_table()
+    body = request.get_json(silent=True) or request.form.to_dict() or {}
+    fid, rating = body.get("id"), body.get("rating")
+    if fid is None or rating not in (1, -1, "1", "-1"):
+        return jsonify({"error": "id und rating (+1/-1) erforderlich"}), 400
+    lakebase.run_write(
+        f"UPDATE {FEEDBACK_TABLE} SET rating = %(r)s WHERE id = %(id)s",
+        {"r": int(rating), "id": int(fid)},
+    )
+    return jsonify({"status": "ok"})
 
 
 @app.route("/api/normen", methods=["GET"])
