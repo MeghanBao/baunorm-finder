@@ -16,6 +16,10 @@ import sys
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.getcwd(), "..")))
 
+# Also put src/ on the path so MLflow's log-time exec of agent.py can `import
+# config` (code_paths=[src] covers the same import at serving time).
+sys.path.insert(0, os.path.abspath(os.path.join(os.getcwd(), "..", "src")))
+
 for _w, _default in (("env", "dev"), ("catalog", ""), ("embedding_mode", "")):
     dbutils.widgets.text(_w, _default)
 os.environ["BAUNORM_ENV"] = dbutils.widgets.get("env") or "dev"
