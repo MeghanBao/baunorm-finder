@@ -101,6 +101,19 @@ Normtexte selbst.
 - Skaliert bei größeren Datenmengen (mehrere hundert Einträge+); kann später auf
   eine echte Volltextsuche (z. B. SQLite FTS5) umgestellt werden
 
+## Databricks-Varianten
+
+Über die schlanke Stichwortsuche hinaus gibt es zwei Databricks-Ausbaustufen:
+
+- **[`baunorm-lakebase-app/`](baunorm-lakebase-app/README.md)** — dieselbe Suche als
+  **Databricks App** auf **Lakebase** (managed Postgres) mit Change Data Feed.
+- **[`databricks-rag-platform/`](databricks-rag-platform/README.md)** — ein
+  **unternehmenstauglicher RAG-Assistent**, vollständig nativ auf Databricks:
+  provenance-getaggter Korpus → **Vector Search** → **Mosaic AI Agent**
+  (Llama 3.3 70B) → **MLflow-Evaluation** → App-UI mit Zitaten und
+  Herkunfts-Badges. Generation ohne externen LLM; deploybar als **ein Asset Bundle**
+  (dev/staging/prod).
+
 ## Ähnliche Projekte in Deutschland
 
 Es gibt bereits kommerzielle Lösungen mit ähnlicher Stoßrichtung, aber kein

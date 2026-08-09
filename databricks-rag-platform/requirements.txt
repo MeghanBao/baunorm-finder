@@ -1,0 +1,7 @@
+# Local dev + unit tests for the RAG platform. On Databricks, notebooks use the
+# runtime's preinstalled Spark/MLflow plus %pip installs where noted.
+databricks-sdk>=0.30.0
+databricks-vectorsearch>=0.40
+mlflow>=2.16.0
+databricks-agents>=0.5.0
+pytest>=8.0
